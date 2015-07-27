@@ -275,6 +275,159 @@ for row = 1:8:new_size(1)
 end
 ```
 
+### 2.9 实现 JPEG 编码
+
+我们刚刚实现的 `preprocess` 函数已经实现了分块，DCT 和量化的工作。所以为了完成 JPEG 编码工作，我们还需要计算 DC 系数流和 AC 系数流。
+
+我们先来定义几个辅助函数：
+
+`diff_encode`: 计算差分编码：
+
+```matlab
+%% diff_encode: Encode using differential coding.
+function Y = diff_encode(X)
+    Y = [0 X] - [X 0];  % X(n - 1) - X(n).
+    Y = [X(1), Y(2:end-1)];
+end
+```
+
+`amp2cate`: 根据幅度计算 Huffman 表中所属类别：
+
+```matlab
+%% amp2cate: Convert amp to category
+function cate = amp2cate(amp)
+    cate = ceil(log2(abs(amp) + 1));
+```
+
+`dec2_1s`: 将十进制转化为 1-补码
+
+```matlab
+%% dec2_1s: Convert decimal to 1's complement
+function y = dec2_1s(dec)
+    y = dec2bin(abs(dec)) - '0';
+    if dec < 0
+        y = 1 - y;  % Use 1's complement.
+    end
+```
+
+然后我们便可以开始实现具体的编码函数了。
+
+对于 DC 系数，我们先对其进行差分编码，然后依次对每个预测误差进行编码，形成码流。需要注意的是，对于 Category 为 0 的预测误差，其取值只有可能是 0，故不需要编码其 Magnitude。具体代码实现如下：
+
+```matlab
+%% encode_dc: Encode DC component
+function DC_stream = encode_dc(DC, DCTAB)
+    errors = diff_encode(DC);
+    category = amp2cate(errors);
+
+    DC_stream = [];
+
+    for k = 1:length(errors)
+        e = errors(k);
+        row = category(k) + 1;
+
+        huff = DCTAB(row, 2:1+DCTAB(row, 1));
+        if e == 0
+            DC_stream = [DC_stream huff];
+        else
+            DC_stream = [DC_stream huff dec2_1s(e)];
+        end
+    end
+
+    DC_stream = DC_stream';
+end
+```
+
+让我们用 例2.2 的样例测试一下：
+
+```matlab
+num2str(encode_dc([10, 8, 60], DCTAB)')
+% ans =
+%
+% 1  0  1  1  0  1  0  0  1  1  1  0  1  1  1  0  0  0  1  0  1  1
+```
+
+结果与例题答案一致。
+
+紧接着，我们对 AC 系数进行编码。我们依次对每一列进行处理，对每一列做如下操作：
+
+1. 找到第一个非零元素，若没有则说明已到块尾，加入 EOB 标记后处理下一块；
+2. 若 run 大于 15 则加入 ZRL，直到 run 小余等于 15；
+3. 对 amp 进行编码，加入码流；
+4. 去除这列中已处理的元素，返回步骤 1。
+
+具体代码实现如下：
+
+```matlab
+%% encode_ac: Encode AC component
+function AC_stream = encode_ac(AC, ACTAB)
+    AC_stream = [];
+
+    for k = 1:size(AC, 2)  % For every block.
+        col = AC(:, k);
+
+        amp_index = find(col, 1);  % Find first non-zero.
+        while numel(amp_index)
+            amp = col(amp_index);
+            Run = amp_index - 1;
+
+            % Reduce zeros.
+            while Run > 15
+                AC_stream = [AC_stream 1 1 1 1 1 1 1 1 0 0 1];
+                Run = Run - 16;
+            end
+
+            % Encode run/size
+            Size = amp2cate(amp);
+            row = Run * 10 + Size;
+            huff = ACTAB(row, 4:3+ACTAB(row, 3));
+
+            AC_stream = [AC_stream huff dec2_1s(amp)];  % Add to stream.
+
+            col(1:amp_index) = [];  % Delete this run/amp.
+            amp_index = find(col, 1);  % Find next non-zero.
+        end
+        % Else reached EOB.
+        AC_stream = [AC_stream 1 0 1 0];  % EOB.
+    end
+
+    AC_stream = AC_stream';
+```
+
+我们使用 例2.3 中数据进行检验：
+
+```matlab
+AC = [10 3 0 0 2 zeros(1, 20) 1 zeros(1, 37)]';
+num2str(encode_ac(AC, ACTAB)')
+% ans =
+%
+% 1  0  1  1  1  0  1  0  0  1  1  1  1  1  1  1  1  0  0  0  1  0  ...
+% 1  1  1  1  1  1  1  1  0  0  1  1  1  1  0  1  1  1  1  0  1  0
+```
+
+结果也与样例一致。于是我们编写顶层函数调用预处理函数和编码函数：
+
+```matlab
+%% jpeg_encode: Encode an image using JPEG.
+function [DC_stream, AC_stream, height, width] = jpeg_encode(img)
+    load ../../resource/JpegCoeff
+
+    [coefficients, new_size] = preprocess(img, QTAB);
+    height = new_size(1);
+    width  = new_size(2);
+
+    DC_stream = encode_dc(coefficients(1, :), DCTAB);
+    AC_stream = encode_ac(coefficients(2:end, :), ACTAB);
+end
+```
+
+对 hall_gray 进行处理，并将结果保存在 `jpegcodes.mat` 中：
+
+```matlab
+[DC_stream, AC_stream, height, width] = jpeg_encode(hall_gray);
+save jpegcodes DC_stream AC_stream height width
+```
+
 ## 第三章 信息隐藏
 
 ## 第四章 人脸识别
