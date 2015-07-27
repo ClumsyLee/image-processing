@@ -59,6 +59,8 @@ imwrite(add_circle(hall_color), 'report/hall_circal.bmp');
 
 #### 1.2b 黑白格涂色
 
+为了将测试图像涂成国际象棋“黑白格”的样子，我们只需要对所有像素进行迭代，并计算出每块像素所属的格子。若为黑格子，我们只需将该位置改为黑色即可。具体代码如下：
+
 ```matlab
 %% add_chess_board_mask: Add a mask like a chess board to a image
 function masked_img = add_chess_board_mask(img)
@@ -84,6 +86,8 @@ imwrite(add_chess_borad_mask(hall_color), 'report/hall_chess_borad.bmp');
 得到图像如下：
 
 ![Hall under a chess board](hall_chess_borad.bmp)
+
+可以看到，以上两个图都达到了目标。
 
 ## 第二章 图像压缩编码
 
