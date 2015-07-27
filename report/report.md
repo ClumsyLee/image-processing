@@ -428,6 +428,19 @@ end
 save jpegcodes DC_stream AC_stream height width
 ```
 
+### 2.10 计算压缩比
+
+由于输入的图像每个像素为 8 比特（`uint8`），输出的码流每个元素为 1 比特，故使用下公式计算：
+
+```matlab
+(prod(size(hall_gray)) * 8) / length([DC_stream; AC_stream])
+% ans =
+%
+%     6.4247
+```
+
+故压缩比约为 6.42。
+
 ## 第三章 信息隐藏
 
 ## 第四章 人脸识别
