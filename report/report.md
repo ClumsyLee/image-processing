@@ -97,6 +97,8 @@ imwrite(add_chess_borad_mask(hall_color), '../../report/hall_chess_borad.bmp');
 
 我们使用 `hall_gray` 的其中一块进行验证：
 
+![Block](block.png)
+
 ```matlab
 block = hall_gray(41:48, 65:72);
 c = dct2(block);
