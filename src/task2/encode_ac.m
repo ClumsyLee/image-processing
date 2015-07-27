@@ -34,3 +34,5 @@ function AC_stream = encode_ac(AC, ACTAB)
         % Else reached EOB.
         AC_stream = [AC_stream 1 0 1 0];  % EOB.
     end
+
+    AC_stream = AC_stream';

@@ -21,6 +21,8 @@ function DC_stream = encode_dc(DC, DCTAB)
 
         DC_stream = [DC_stream huff mag];
     end
+
+    DC_stream = DC_stream';
 end
 
 %% diff_encode: Encode using differential coding.
