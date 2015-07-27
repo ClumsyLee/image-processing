@@ -98,14 +98,14 @@ imwrite(add_chess_borad_mask(hall_color), '../../report/hall_chess_borad.bmp');
 我们使用 `hall_gray` 的其中一块进行验证：
 
 ```matlab
-block = hall_gray(81:88, 33:40);
+block = hall_gray(41:48, 65:72);
 c = dct2(block);
 c(1) = c(1) - 1024;  % Decimate DC component.
 
 norm(c - dct2(int16(block) - 128))  % Compare two methods.
 % ans =
 %
-%    1.3482e-13
+%    2.1047e-13
 ```
 
 可以看到，两种方法得到的变换域矩阵几乎完全相同。产生的一些误差可能来自于计算中的舍入误差。
@@ -137,7 +137,7 @@ function B = my_dct2(A)
 norm(my_dct2(block) - dct2(block))
 % ans =
 %
-%    4.0941e-13
+%    7.9534e-13
 ```
 
 可以看到误差极小，说明我们实现的二维 DCT 变换是正确的。
