@@ -237,6 +237,44 @@ freqz([-1 1], 1);
 从表中不难观察出，error 越大，Category 越大，具体关系为：
 
     Category = ceil(log2(|error| + 1))
+### 2.8 分块，DCT & 量化
+
+为了实现分块，DCT 和量化，我们编写了 `preprocess` 函数。其中具体完成的操作如下：
+
+首先，为了之后的矩阵计算，我们先将传入的图像 `img` 转换为 `double`，同时将每个元素减去 128。
+
+```matlab
+img = double(img) - 128;  % Convert to double for matrix ops later.
+```
+
+然后，分块前我们确保图像的尺寸是 8 的倍数，若不是则用右下方元素填充：
+
+```matlab
+% Ensure row/col is a multiple of 8.
+origin_size = size(img);
+new_size = ceil(origin_size / 8) * 8;
+left = new_size - origin_size;
+
+img = [img,                            img(:, end) * ones(1, left(2))
+       ones(left(1), 1) * img(end, :), img(end) * ones(left)];
+```
+
+然后我们便可以遍历所有块，对每个块进行 DCT ，量化和 Zig-Zag 遍历：
+
+```matlab
+out = zeros(64, numel(img) / 64);  % Placeholder for the output.
+
+% Scanning blocks.
+k = 1;
+for row = 1:8:new_size(1)
+    for col = 1:8:new_size(2)
+        c = dct2(img(row:row+7, col:col+7));   % DCT
+        out(:, k) = zigzag(round(c ./ QTAB));  % Quantize & zig-zag.
+        k = k + 1;
+    end
+end
+```
+
 ## 第三章 信息隐藏
 
 ## 第四章 人脸识别
