@@ -93,14 +93,16 @@ imwrite(add_chess_borad_mask(hall_color), '../../report/hall_chess_borad.bmp');
 
 由于变换域中的第一个分量便是直流分量，所以很明显这一步骤可以在变换域中进行。具体来说，由于 N = 8 时二维 DCT 变换的 DC 基底为 1/8，故只需要将 DC 分量减去 `128 / (1/8) = 1024` 即可。
 
+需要注意的是，由于原矩阵元素类型为 `uint8`，故将其减去 128 前应将其转换成足够大的有符号数，例如 `int16`。
+
 我们使用 `hall_gray` 的其中一块进行验证：
 
 ```matlab
-block = int16(hall_gray(81:88, 33:40, :));
+block = hall_gray(81:88, 33:40);
 c = dct2(block);
 c(1) = c(1) - 1024;  % Decimate DC component.
 
-norm(c - dct2(block - 128))  % Compare two methods.
+norm(c - dct2(int16(block) - 128))  % Compare two methods.
 % ans =
 %
 %    1.3482e-13
