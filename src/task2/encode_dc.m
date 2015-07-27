@@ -1,7 +1,7 @@
 %% encode_dc: Encode DC component
 function DC_stream = encode_dc(DC, DCTAB)
     errors = diff_encode(DC);
-    category = ceil(log2(abs(errors) + 1));
+    category = amp2cate(errors);
 
     DC_stream = [];
 
@@ -11,15 +11,10 @@ function DC_stream = encode_dc(DC, DCTAB)
 
         huff = DCTAB(row, 2:1+DCTAB(row, 1));
         if e == 0
-            mag = [];
+            DC_stream = [DC_stream huff];
         else
-            mag = dec2bin(abs(e)) - '0';
-            if e < 0
-                mag = 1 - mag;  % Use 1's complement.
-            end
+            DC_stream = [DC_stream huff dec2_1s(e)];
         end
-
-        DC_stream = [DC_stream huff mag];
     end
 
     DC_stream = DC_stream';

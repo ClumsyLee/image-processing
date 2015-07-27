@@ -17,16 +17,11 @@ function AC_stream = encode_ac(AC, ACTAB)
             end
 
             % Encode run/size
-            Size = ceil(log2(abs(amp) + 1));
+            Size = amp2cate(amp);
             row = Run * 10 + Size;
             huff = ACTAB(row, 4:3+ACTAB(row, 3));
 
-            Amp = dec2bin(abs(amp)) - '0';
-            if amp < 0
-                Amp = 1 - Amp;  % Use 1's complement.
-            end
-
-            AC_stream = [AC_stream huff Amp];  % Add to stream.
+            AC_stream = [AC_stream huff dec2_1s(amp)];  % Add to stream.
 
             col(1:amp_index) = [];  % Delete this run/amp.
             amp_index = find(col, 1);  % Find next non-zero.
