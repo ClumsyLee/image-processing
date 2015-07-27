@@ -110,6 +110,38 @@ norm(c - dct2(block - 128))  % Compare two methods.
 
 可以看到，两种方法得到的变换域矩阵几乎完全相同。产生的一些误差可能来自于计算中的舍入误差。
 
+### 2.2 实现二维 DCT
+
+由公式 `C = D * P * DT` 可知，进行二维 DCT 的关键在于构造 DCT 算子 D。为此我们先定义函数 `trans_mat`：
+
+```matlab
+%% trans_mat: Construct NxN DCT transform matrix
+function D = trans_mat(N)
+    D = sqrt(2 / N) * cos([0:N-1]' * [1:2:2*N-1] * pi / (2 * N));
+    D(1, :) = sqrt(1 / N);
+```
+
+然后我们便可以轻松进行二维 DCT 变换了：
+
+```matlab
+%% my_dct2: My implementation of dct2
+function B = my_dct2(A)
+    % DCT transform matrix.
+    [row, col] = size(A);
+    B = trans_mat(row) * A * trans_mat(col)';
+```
+
+和内置函数 `dct2` 进行比较：
+
+```matlab
+norm(my_dct2(block) - dct2(block))
+% ans =
+%
+%    4.0941e-13
+```
+
+可以看到误差极小，说明我们实现的二维 DCT 变换是正确的。
+
 ## 第三章 信息隐藏
 
 ## 第四章 人脸识别
