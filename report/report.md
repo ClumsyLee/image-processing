@@ -128,7 +128,7 @@ function D = trans_mat(N)
 function B = my_dct2(A)
     % DCT transform matrix.
     [row, col] = size(A);
-    B = trans_mat(row) * A * trans_mat(col)';
+    B = trans_mat(row) * double(A) * trans_mat(col)';
 ```
 
 和内置函数 `dct2` 进行比较：

@@ -2,7 +2,7 @@
 function B = my_dct2(A)
     % DCT transform matrix.
     [row, col] = size(A);
-    B = trans_mat(row) * A * trans_mat(col)';
+    B = trans_mat(row) * double(A) * trans_mat(col)';
 
 %% trans_mat: Construct NxN DCT transform matrix
 function D = trans_mat(N)
