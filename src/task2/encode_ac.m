@@ -5,9 +5,9 @@ function AC_stream = encode_ac(AC, ACTAB)
     for k = 1:size(AC, 2)  % For every block.
         col = AC(:, k);
 
-        amp_index = find(AC, 1);  % Find first non-zero.
+        amp_index = find(col, 1);  % Find first non-zero.
         while numel(amp_index)
-            amp = AC(amp_index);
+            amp = col(amp_index);
             Run = amp_index - 1;
 
             % Reduce zeros.
@@ -28,8 +28,8 @@ function AC_stream = encode_ac(AC, ACTAB)
 
             AC_stream = [AC_stream huff Amp];  % Add to stream.
 
-            AC(1:amp_index) = [];  % Delete this run/amp.
-            amp_index = find(AC, 1);  % Find next non-zero.
+            col(1:amp_index) = [];  % Delete this run/amp.
+            amp_index = find(col, 1);  % Find next non-zero.
         end
         % Else reached EOB.
         AC_stream = [AC_stream 1 0 1 0];  % EOB.
