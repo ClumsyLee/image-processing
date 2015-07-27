@@ -91,6 +91,25 @@ imwrite(add_chess_borad_mask(hall_color), 'report/hall_chess_borad.bmp');
 
 ## 第二章 图像压缩编码
 
+### 2.1 在变换域中实现预处理
+
+由于变换域中的第一个分量便是直流分量，所以很明显这一步骤可以在变换域中进行。具体来说，由于 N = 8 时二维 DCT 变换的 DC 基底为 1/8，故只需要将 DC 分量减去 `128 / (1/8) = 1024` 即可。
+
+我们使用 `hall_gray` 的其中一块进行验证：
+
+```matlab
+block = int16(hall_gray(81:88, 33:40, :));
+c = dct2(block);
+c(1) = c(1) - 1024;  % Decimate DC component.
+
+norm(c - dct2(block - 128))  % Compare two methods.
+% ans =
+%
+%    1.3482e-13
+```
+
+可以看到，两种方法得到的变换域矩阵几乎完全相同。产生的一些误差可能来自于计算中的舍入误差。
+
 ## 第三章 信息隐藏
 
 ## 第四章 人脸识别
