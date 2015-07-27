@@ -178,6 +178,42 @@ title 'Zeros On The Left'
 
 可以看到，横向上的低频分量和高频分量被分离到了中下两幅图中，和我们的理论分析一致。
 
+### 2.4 转置/旋转 DCT 系数
+
+若对 DCT 系数转置，则横向与纵向分量系数互换，故恢复出的图像同样发生转置。
+
+若将 DCT 系数旋转 90°，则大部分能量会转移到左下角，即纵向高频横向低频。
+
+同样，若旋转 180°，则大部分能量会转移到右下角，即双向高频。
+
+实际效果如下所示：
+
+```matlab
+subplot 221
+imshow(uint8(idct2(c) + 128))
+title Origin
+
+subplot 222
+imshow(uint8(idct2(c') + 128))
+title Transpose
+
+subplot 223
+imshow(uint8(idct2(rot90(c)) + 128))
+title 'Rotate 90 degree'
+
+subplot 224
+imshow(uint8(idct2(rot90(rot90(c))) + 128))
+title 'Rotate 180 degree'
+```
+
+![Transpose / rotate coefficients](trans_rot.png)
+
+和我们的理论分析一致。令人不解的是，左下图与右上图，左上图与右下图看起来竟然有些许相似。让我们看看换另一块的看看处理结果：
+
+![Transpose / rotate coefficients (block 2)](trans_rot_2.png)
+
+仍然和我们的理论分析一致，但相似性几乎消失了。之前的相似性可能是由频谱的巧妙分布，导致旋转后仍会形成条带，所以看起来和原图有些相似。
+
 ## 第三章 信息隐藏
 
 ## 第四章 人脸识别
