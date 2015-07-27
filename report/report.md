@@ -144,6 +144,40 @@ norm(my_dct2(block) - dct2(block))
 
 可以看到误差极小，说明我们实现的二维 DCT 变换是正确的。
 
+### 2.3 改变 DCT 系数
+
+我们先来看一下 8x8 DCT 的基底：
+
+![8x8 DCT](https://upload.wikimedia.org/wikipedia/commons/2/24/DCT-8x8.png)
+
+可以发现，相对于前四列，右侧四列基底在横向上都有较高频变化。故若将右四列置为 0，恢复出的图像应在横向上没有高频分量。反之，若将左四列置为 0，则恢复出的图像在横向上应没有低频分量。
+
+我们先对原来的 block 和 `hall_gray(17:24, 81:88)` 进行验证：
+
+```matlab
+c_right_zero = c;
+c_left_zero = c;
+c_right_zero(:, 5:8) = 0;
+c_left_zero(:, 1:4) = 0;
+
+subplot 311
+imshow(block)
+title Origin
+
+subplot 312
+imshow(uint8(idct2(c_right_zero) + 128))
+title 'Zeros On The Right'
+
+subplot 313
+imshow(uint8(idct2(c_left_zero) + 128))
+title 'Zeros On The Left'
+```
+
+![Zero columns](zero_cols.png)
+![Zero columns (block2)](zero_cols_2.png)
+
+可以看到，横向上的低频分量和高频分量被分离到了中下两幅图中，和我们的理论分析一致。
+
 ## 第三章 信息隐藏
 
 ## 第四章 人脸识别
