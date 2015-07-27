@@ -1,5 +1,5 @@
 %% preprocess: Block splitting, DCT & quantization
-function out = preprocess(img, QTAB)
+function [out, new_size] = preprocess(img, QTAB)
     img = double(img) - 128;  % Convert to double for matrix ops later.
 
     % Ensure row/col is a multiple of 8.
