@@ -1,7 +1,5 @@
 % Luis' approach
-function y = zigzag(X)
-[r, c] = size(X);
-M = bsxfun(@plus, (1:r).', 0:c-1);
-M = M + bsxfun(@times, (1:r).'/(r+c), (-1).^M);
-[~, ind] = sort(M(:));
-y = X(ind).';
+function index = zigzag(r)
+M = bsxfun(@plus, (1:r).', 0:r-1);
+M = M + bsxfun(@times, (1:r).'/(2*r), (-1).^M);
+[~, index] = sort(M(:));
