@@ -26,8 +26,9 @@ function AC_stream = encode_ac(AC, ACTAB)
             col(1:amp_index) = [];  % Delete this run/amp.
             amp_index = find(col, 1);  % Find next non-zero.
         end
-        % Else reached EOB.
-        AC_stream = [AC_stream 1 0 1 0];  % EOB.
+        if length(col)  % Zero(s) not coded, insert EOB
+            AC_stream = [AC_stream 1 0 1 0];
+        end
     end
 
     AC_stream = AC_stream';
