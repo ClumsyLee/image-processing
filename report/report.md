@@ -661,4 +661,120 @@ psnr(decoded_img, snow)
 
 ## 第三章 信息隐藏
 
+### 3.1 实现时空隐藏和提取方法
+
+为了实现本章中所提到的时空隐藏和提取方法，我们先来设计信息的隐藏方法：
+
+为了方便提取信息，我们先在隐藏的信息前加入一 32 bit 的 Header，用来标识所隐藏信息的字节数。而长度的二进制表示可以通过 `bitget` 轻松获得。
+
+紧接着，我们将需要隐藏的信息转化为比特流。这也是通过 `bitget` 实现的。不过由于该函数的限制，我们每次取出 1 位，用循环将 8 位全部取出来。
+
+最后，我们通过 `bitset` 函数，以行优先的形式将比特流插入到原图像的前端。最后还要保证返回图像的元素类型为 `uint8`。具体实现如下：
+
+```matlab
+%% hide_pixel_domain: Hide infomations in pixel domain
+%% data_str should be in ASCII.
+function data_img = hide_pixel_domain(img, data_str)
+    data_len = length(data_str);
+    code_len = data_len * 8 + 32;
+    if numel(img) < code_len
+        error 'The image is too small to hide data.'
+    end
+
+    % Use the first 32 bits to store size of following data.
+    header = bitget(data_len, [32:-1:1]');
+
+    % Serialize body to binary.
+    data_str = uint8(data_str);
+    body = zeros(8, data_len);
+    for row = 1:8
+        body(row, :) = bitget(data_str, 9 - row);
+    end
+
+    % Insert into image.
+    img = img';
+    img(1:code_len) = bitset(img(1:code_len)', 1, [header; body(:)]);
+    data_img = uint8(img');
+```
+
+而对于解码端，我们只需要先提取出 Header，得到数据的字节数；然后我们用 `bitget` 直接提取出数据比特流，再通过 `reshape` 和矩阵乘法将其转变为字节流。最后我们将得到的数据转换为 `char` 类型返回。
+
+为了提高算法的鲁棒性，我们在 Header 读取失败时尝试从余下所有像素中读取信息。具体代码实现如下：
+
+```matlab
+%% read_pixel_domain: Read infomations from pixel domain
+function data_str = read_pixel_domain(data_img)
+    data_img = data_img';
+
+    % Read the first 32 bit for data_len.
+    data_len = (2 .^ [0:31]) * double(bitget(data_img(32:-1:1), 1)');
+
+    code_len = data_len * 8 + 32;
+    if code_len > numel(data_img)  % Wrong header.
+        warning(['Wrong header detected in the image, ' ...
+                 'trying to read from the whole image.']);
+        data_len = ceil((numel(data_img) - 32) / 8);
+        code_len = data_len * 8 + 32;
+    end
+
+    % Read body.
+    body = reshape(bitget(data_img(33:code_len), 1), [8, data_len]);
+
+    data_str = char([128 64 32 16 8 4 2 1] * double(body));
+```
+
+我们实验一下隐藏和提取的效果：
+
+```matlab
+data = ['Here''s to the crazy ones. The misfits. The rebels. The ' ...
+        'troublemakers. The round pegs in the square holes. The ones ' ...
+        'who see things differently. They''re not fond of rules. And ' ...
+        'they have no respect for the status quo. You can quote them, ' ...
+        'disagree with them, glorify or vilify them. About the only ' ...
+        'thing you can''t do is ignore them. Because they change things. ' ...
+        'They push the human race forward. And while some may see them ' ...
+        'as the crazy ones, we see genius. Because the people who are ' ...
+        'crazy enough to think they can change the world, are the ones ' ...
+        'who do.'];
+
+data_img = hide_pixel_domain(hall_gray, data);
+data_read = read_pixel_domain(data_img);
+all(data == data_read)
+% ans =
+%
+%      1
+
+subplot 211
+imshow(hall_gray)
+title 'Without Data'
+
+subplot 212
+imshow(data_img)
+title 'With Data'
+```
+
+![Hide in pixel domain](hide_pixel_domain.png)
+
+可以看到，从图像上很难看出有信息被隐藏。同时我们也成功恢复出了数据。故我们确实达到了隐藏信息的目的。
+
+然而，若得到的图片进行 JPEG 编码后再尝试解码
+
+```matlab
+[DC_stream, AC_stream, height, width] = jpeg_encode(data_img);
+decoded_img = jpeg_decode(DC_stream, AC_stream, height, width);
+data_read2 = read_pixel_domain(decoded_img);
+% Warning: Wrong header detected in the image, trying to read from ...
+% the whole image.
+% In read_pixel_domain at 10
+```
+
+可以看到 Header 读取已经失败了。我们来看看恢复出数据的前 50 个字符：
+
+```matlab
+data_read2(1:50)
+% ans =
+%
+%        -¤Mã$ç$F 5E       £@®q$ç1$/ýÃ}       
+```
+
 ## 第四章 人脸识别
