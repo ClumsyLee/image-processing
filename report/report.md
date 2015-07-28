@@ -268,8 +268,9 @@ out = zeros(64, numel(img) / 64);  % Placeholder for the output.
 k = 1;
 for row = 1:8:new_size(1)
     for col = 1:8:new_size(2)
-        c = dct2(img(row:row+7, col:col+7));   % DCT
-        out(:, k) = zigzag(round(c ./ QTAB));  % Quantize & zig-zag.
+        c = dct2(img(row:row+7, col:col+7));  % DCT.
+        c = round(c ./ QTAB);                 % Quantize.
+        out(:, k) = c(zigzag(8));             % Zig-Zag.
         k = k + 1;
     end
 end
