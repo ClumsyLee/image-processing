@@ -234,7 +234,7 @@ freqz([-1 1], 1);
 
 ### 2.6 DC 预测误差与 Category 的关系
 
-从表中不难观察出，error 越大，Category 越大，具体关系为：
+从表中不难观察出，Category 的值即为预测误差所对应的 Magnitude 二进制表示的长度。具体关系为：
 
     Category = ceil(log2(|error| + 1))
 ### 2.8 分块，DCT & 量化
