@@ -352,7 +352,7 @@ num2str(encode_dc([10, 8, 60], DCTAB)')
 
 紧接着，我们对 AC 系数进行编码。我们依次对每一列进行处理，对每一列做如下操作：
 
-1. 找到第一个非零元素，若没有则说明已到块尾，加入 EOB 标记后处理下一块；
+1. 找到第一个非零元素，若没有且仍有数据说明该列末尾有 0，加入 EOB 标记后处理下一块；
 2. 若 run 大于 15 则加入 ZRL，直到 run 小余等于 15；
 3. 对 amp 进行编码，加入码流；
 4. 去除这列中已处理的元素，返回步骤 1。
@@ -388,8 +388,9 @@ function AC_stream = encode_ac(AC, ACTAB)
             col(1:amp_index) = [];  % Delete this run/amp.
             amp_index = find(col, 1);  % Find next non-zero.
         end
-        % Else reached EOB.
-        AC_stream = [AC_stream 1 0 1 0];  % EOB.
+        if length(col)  % Zero(s) not coded, insert EOB
+            AC_stream = [AC_stream 1 0 1 0];
+        end
     end
 
     AC_stream = AC_stream';
@@ -516,7 +517,7 @@ function DC = decode_dc(DC_stream, DCTAB, block_num)
 function AC = decode_ac(AC_stream, ACTAB, block_num)
     AC = zeros(63, block_num);
     huffman_table = [ACTAB(:, 4:end)
-                     ones(1, 8) 0 0 1 zeros(1, 5);  % ZRL
+                     ones(1, 8) 0 0 1 zeros(1, 5)  % ZRL
                      1 0 1 0 zeros(1, 12)];  % EOB
 
     for block = 1:block_num
@@ -537,6 +538,7 @@ function AC = decode_ac(AC_stream, ACTAB, block_num)
             k = k + 1;  % Skip amp.
         end
     end
+end
 
 %% decode_index: Decode index into Run & Size
 function [Run, Size] = decode_index(index)
@@ -550,6 +552,7 @@ function [Run, Size] = decode_index(index)
         Run = 0;
         Size = 0;
     end
+end
 ```
 
 这时我们已经解出了预处理后的 DC 与 AC 系数。紧接着，我们要实现 `preprocess` 的逆过程 `inv_preprocess`。我们依次对系数矩阵的每一列进行逆 Zig-Zag，反量化和 DCT 逆变换，最后给每个像素值加上 128 并转换为 `uint8` 类型。具体是实现如下：
@@ -637,6 +640,26 @@ psnr(decoded_img, hall_gray)
 
 而在图像上，我们也可以发现之前失真较大的一些细节变得清晰了不少，例如树叶的细节变得清晰，大礼堂上方三角的分块感也不那么明显了。这说明之前那些失真确实主要是量化误差导致的。
 
+### 2.13 编解码电视机雪花图像
+
+使用完全相同的流程，用标准量化步长进行编解码，得到结果如下：
+
+```matlab
+(prod(size(snow)) * 8 + 64) / (length([DC_stream; AC_stream]) + 64)
+% ans =
+%
+%     3.5981
+psnr(decoded_img, snow)
+% ans =
+%
+%    22.9244
+```
+
+![Compare origin & decode snow](snow_compare_decoded.png)
+
+可以看到，不仅图像的压缩率下降了不少（6.41 => 3.60），PSNR 也有很大幅度的减小（31.19 => 22.92）。同时，观察编码前后的图像可以发现，有些地方似乎有“抹平”的痕迹（如右方中间的一块）。
+
+这也是高频分量量化误差的表现。因为，雪花图片的各交流分量的分布比较均匀，然而标准量化步长中高频的步长较大，故作用在雪花图像上时造成了较大的量化误差。这说明，标准量化误差不太适用于这种高频分量较高的图片。当然，值得一提的是，整体上来，原图和编解码后的图都十分混乱，所以也看不出太大差异…
 
 ## 第三章 信息隐藏
 
