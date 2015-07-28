@@ -443,6 +443,179 @@ save jpegcodes DC_stream AC_stream height width
 
 这里要注意的是，我们在分子和分母上都加上了图像大小信息。这是因为无论是编码前还是编码后，其对于显示图像都是必须的。
 
+### 2.11 实现 JPEG 解码
+
+为了实现 JPEG 的解码，我们首先需要从 DC 系数流和 AC 系数流中恢复出 `preprocess` 的输出，然后再进行 `preprocess` 的逆过程，便可以恢复出图像。
+
+与前面类似，我们先定义几个辅助函数：
+
+`huffman_decode`: 利用对应表，从码流首段解出第一个码字。
+
+由于 Huffman 编码是前缀码，故为了判断是否匹配成功，只需要判断是否只有一行与码字完全匹配。故我们使用 `candidate` 数组保留可能匹配的码字，在增长码字长度的同时去掉不匹配的候选码字，最后只剩一个码字时返回其行号。具体实现如下：
+
+```matlab
+%% huffman_decode: Decode huffman code
+function [index, len] = huffman_decode(codes, huffman_table)
+    candidate = 1:size(huffman_table, 1);
+
+    len = 0;
+    while length(candidate) > 1
+        len = len + 1;
+        for k = 1:length(candidate)
+            row = candidate(k);
+            if codes(len) ~= huffman_table(row, len)
+                candidate(k) = 0;  % Mark as unqualified.
+            end
+        end
+        candidate(candidate == 0) = [];  % Eliminate unqualified.
+    end
+
+    index = candidate;
+```
+
+`decode_amp`: 对 Magnitude/Amplitude 进行解码。
+
+```matlab
+%% decode_amp: Decode mag/amp
+function amp = decode_amp(code)
+    if isempty(code)
+        amp = 0;
+    elseif code(1) == 0  % Nagetive.
+        amp = -bin2dec(int2str(1 - code)');
+    else
+        amp = bin2dec(int2str(code)');
+    end
+```
+
+然后我们开始实现核心解码函数。
+
+首先对于 DC 码流，我们只需要循环解出每个系数，然后使用 `cumsum` 解差分编码即可。具体实现如下：
+
+```matlab
+%% decode_dc: Decode DC component
+function DC = decode_dc(DC_stream, DCTAB, block_num)
+    DC = zeros(1, block_num);
+    huffman_table = DCTAB(:, 2:end);
+
+    for block = 1:block_num
+        [index, len] = huffman_decode(DC_stream, huffman_table);
+        DC_stream(1:len) = [];  % Remove decoded.
+        category = index - 1;   % category == code length.
+
+        DC(block) = decode_amp(DC_stream(1:category));
+        DC_stream(1:category) = [];  % Remove decoded.
+    end
+
+    DC = cumsum([DC(1), -DC(2:end)]);
+```
+
+对于 AC 码流，有几点需要注意的地方。首先，我们需要在 ACTAB 表中加入 ZRL 和 EOB 的项，保证 Huffman 表的完整性；其次，我们需要从 `huffman_decode` 函数返回的行号中解析出 `Run` 和 `Size`，并在 `Run = Size = 0`（即 EOB）的情况下做特殊处理。具体实现如下：
+
+```matlab
+%% decode_ac: Decode AC component
+function AC = decode_ac(AC_stream, ACTAB, block_num)
+    AC = zeros(63, block_num);
+    huffman_table = [ACTAB(:, 4:end)
+                     ones(1, 8) 0 0 1 zeros(1, 5);  % ZRL
+                     1 0 1 0 zeros(1, 12)];  % EOB
+
+    for block = 1:block_num
+        k = 1;
+        while k <= 63
+            [index, len] = huffman_decode(AC_stream, huffman_table);
+            AC_stream(1:len) = [];  % Remove decoded.
+            [Run, Size] = decode_index(index);
+
+            if Run == 0 & Size == 0  % EOB
+                break  % Go to next block.
+            end
+
+            k = k + Run;  % Skip Run steps, because they are already 0s.
+
+            AC(k, block) = decode_amp(AC_stream(1:Size));
+            AC_stream(1:Size) = [];  % Remove decoded.
+            k = k + 1;  % Skip amp.
+        end
+    end
+
+%% decode_index: Decode index into Run & Size
+function [Run, Size] = decode_index(index)
+    if index <= 160
+        Run = floor((index - 1) / 10);
+        Size = mod(index - 1, 10) + 1;
+    elseif index == 161  % ZRL
+        Run = 15;
+        Size = 0;
+    else  % EOB
+        Run = 0;
+        Size = 0;
+    end
+```
+
+这时我们已经解出了预处理后的 DC 与 AC 系数。紧接着，我们要实现 `preprocess` 的逆过程 `inv_preprocess`。我们依次对系数矩阵的每一列进行逆 Zig-Zag，反量化和 DCT 逆变换，最后给每个像素值加上 128 并转换为 `uint8` 类型。具体是实现如下：
+
+```matlab
+%% inv_preprocess: Inverse the preprocess
+function [img] = inv_preprocess(pre_out, QTAB, height, width)
+    img = zeros(ceil([height width] / 8) * 8);
+
+    % Scanning blocks.
+    k = 1;
+    for row = 1:8:height
+        for col = 1:8:width
+            block = zeros(8, 8);
+
+            block(zigzag(8)) = pre_out(:, k);          % Inverse Zig-Zag.
+            block = block .* QTAB;                     % Inverse quantize.
+            img(row:row+7, col:col+7) = idct2(block);  % Inverse DCT.
+
+            k = k + 1;
+        end
+    end
+
+    img = img(1:height, 1:width);  % Cut to the origin size.
+    img = uint8(img + 128);
+```
+
+然后我们只需要用一个顶层函数调用这些函数，即可得到解码后的图像灰度值矩阵：
+
+```matlab
+%% jpeg_decode: decode a JPEG encoded image.
+function img = jpeg_decode(DC_stream, AC_stream, height, width)
+    load ../../resource/JpegCoeff
+
+    block_num = prod(ceil([height width] / 8));
+
+    DC = decode_dc(DC_stream, DCTAB, block_num);
+    AC = decode_ac(AC_stream, ACTAB, block_num);
+
+    img = inv_preprocess([DC; AC], QTAB, height, width);
+end
+```
+
+为了测试编解码的效果，我们计算 PSNR，同时主观比较编码前后图像的差异：
+
+```matlab
+load jpegcodes
+decoded_img = jpeg_decode(DC_stream, AC_stream, height, width);
+psnr(decoded_img, hall_gray)
+% ans =
+%
+%    31.1874
+subplot 211
+imshow(hall_gray);
+title Origin
+subplot 212
+imshow(my_img);
+title Decoded
+```
+
+![Compare origin & decoded](compare_decoded.png)
+
+可以看到，PSNR 的值大约是 31.19，同时解码出的图像大致上与原图像相差无几。但仔细观察便可以发现，很多地方还是有编解码的痕迹。例如，大礼堂上方三角的边界变得不太清晰，而且有明显的分块感；大礼堂入口处柱子，以及两侧的树的细节都有失真。
+
+不过总的来说，考虑到这张图像的大小只有 120x168，我们的编码再解码得到的图像确实与原图十分相似，达到了在视觉差异不太大的前提下有损压缩的目标。
+
 
 ## 第三章 信息隐藏
 
