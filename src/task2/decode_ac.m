@@ -23,6 +23,7 @@ function AC = decode_ac(AC_stream, ACTAB, block_num)
             k = k + 1;  % Skip amp.
         end
     end
+end
 
 %% decode_index: Decode index into Run & Size
 function [Run, Size] = decode_index(index)
@@ -36,3 +37,4 @@ function [Run, Size] = decode_index(index)
         Run = 0;
         Size = 0;
     end
+end
