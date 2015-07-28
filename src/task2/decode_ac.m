@@ -2,7 +2,7 @@
 function AC = decode_ac(AC_stream, ACTAB, block_num)
     AC = zeros(63, block_num);
     huffman_table = [ACTAB(:, 4:end)
-                     ones(1, 8) 0 0 1 zeros(1, 5);  % ZRL
+                     ones(1, 8) 0 0 1 zeros(1, 5)  % ZRL
                      1 0 1 0 zeros(1, 12)];  % EOB
 
     for block = 1:block_num
