@@ -247,16 +247,14 @@ freqz([-1 1], 1);
 img = double(img) - 128;  % Convert to double for matrix ops later.
 ```
 
-然后，分块前我们确保图像的尺寸是 8 的倍数，若不是则用右下方元素填充：
+然后，分块前我们确保图像的尺寸是 8 的倍数，若不是则用右下方元素填充。这一点可以用 `padarray` 轻松做到：
 
 ```matlab
 % Ensure row/col is a multiple of 8.
 origin_size = size(img);
 new_size = ceil(origin_size / 8) * 8;
 left = new_size - origin_size;
-
-img = [img,                            img(:, end) * ones(1, left(2))
-       ones(left(1), 1) * img(end, :), img(end) * ones(left)];
+img = padarray(img, left, 'replicate', 'post');
 ```
 
 然后我们便可以遍历所有块，对每个块进行 DCT ，量化和 Zig-Zag 遍历：

@@ -6,9 +6,7 @@ function out = preprocess(img, QTAB)
     origin_size = size(img);
     new_size = ceil(origin_size / 8) * 8;
     left = new_size - origin_size;
-
-    img = [img,                            img(:, end) * ones(1, left(2))
-           ones(left(1), 1) * img(end, :), img(end) * ones(left)];
+    img = padarray(img, left, 'replicate', 'post');
 
     out = zeros(64, numel(img) / 64);  % Placeholder for the answer.
 
