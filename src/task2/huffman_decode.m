@@ -14,8 +14,4 @@ function [index, len] = huffman_decode(codes, huffman_table)
         candidate(candidate == 0) = [];  % Eliminate unqualified.
     end
 
-    if candidate
-        index = candidate;
-    else
-        error(['Unknown code: ' int2str(codes(1:len))]);
-    end
+    index = candidate;
