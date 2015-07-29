@@ -899,11 +899,13 @@ end
 
 需要注意的是，我们需要为 `bitset` 函数提供 `assumedtype` 参数 `int8`。这是因为量化后的 DCT 系数可能是负数，实际取值为 -128 ~ 127，即为 `int8` 的取值范围，而 `bitset` 必须要知道类型信息才能对负数进行操作。 
 
+同时，我们在代码的最后加入检查，若仍有比特没有被编码，则发出警告。
+
 具体代码变化如下：
 
 ```diff
 diff --git a/../task2/preprocess.m b/preprocess_every_dct_coeff.m
-index 7c62ddf..67a4a7d 100644
+index 7c62ddf..c116be8 100644
 --- a/../task2/preprocess.m
 +++ b/preprocess_every_dct_coeff.m
 @@ -1,5 +1,5 @@
@@ -914,7 +916,7 @@ index 7c62ddf..67a4a7d 100644
      img = double(img) - 128;  % Convert to double for matrix ops later.
  
      % Ensure row/col is a multiple of 8.
-@@ -16,6 +16,13 @@ function out = preprocess(img, QTAB)
+@@ -16,7 +16,18 @@ function out = preprocess(img, QTAB)
          for col = 1:8:new_size(2)
              c = dct2(img(row:row+7, col:col+7));  % DCT.
              c = round(c ./ QTAB);                 % Quantize.
@@ -928,6 +930,11 @@ index 7c62ddf..67a4a7d 100644
              out(:, k) = c(zigzag(8));             % Zig-Zag.
              k = k + 1;
          end
+     end
++
++    if numel(bits)
++        warning([num2str(numel(bits)) ' bit(s) not encoded']);
++    end
 ```
 
 同样地，我们也对 `inv_preprocess` 进行修改，在逆  Zig-Zag 之后，反量化之前将最低位提取为比特流。注意到这个地方我们提取的比特流实际上是冗余的，`bits2str` 函数会忽略掉多余的比特流。这样做是为了将逆序列化的工作完全解耦合出去，从而简化逆预处理器的工作。

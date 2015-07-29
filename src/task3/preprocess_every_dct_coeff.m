@@ -27,3 +27,7 @@ function out = preprocess_every_dct_coeff(img, bits, QTAB)
             k = k + 1;
         end
     end
+
+    if numel(bits)
+        warning([num2str(numel(bits)) ' bit(s) not encoded']);
+    end
