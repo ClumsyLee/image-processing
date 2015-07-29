@@ -777,4 +777,118 @@ data_read2(1:50)
 %        -¤Mã$ç$F 5E       £@®q$ç1$/ýÃ}       
 ```
 
+可以看到信息完全丢失了，说明附着的信息确实可能被当做高频信号舍弃掉了。可以说该方法几乎完全不能抗 JPEG 编码。
+
+### 3.2 实现三种变换域信息隐藏和提取方法
+
+为了方便隐藏和提取方法的实现，我们将信息的序列化过程及其复原分离出来实现。代码如下：
+
+```matlab
+%% str2bits: Serialize string into bit stream
+function bits = str2bits(str)
+    data_len = length(str);
+
+    % Use the first 32 bits to store size of following data.
+    header = bitget(data_len, [32:-1:1]');
+
+    % Serialize body.
+    str = uint8(str);
+    body = zeros(8, data_len);
+    for row = 1:8
+        body(row, :) = bitget(str, 9 - row);
+    end
+
+    bits = [header; body(:)];
+```
+
+```matlab
+%% bits2str: Read data into a string from bit stream
+function str = bits2str(bits)
+    % Read the first 32 bit for data_len.
+    data_len = bin2dec(int2str(bits(1:32))');
+
+    code_len = data_len * 8 + 32;
+    if code_len > numel(bits)  % Wrong header.
+        warning(['Wrong header detected, ' ...
+                 'trying to read from the whole bit stream.']);
+        data_len = ceil((numel(bits) - 32) / 8);
+        code_len = data_len * 8 + 32;
+    end
+
+    % Read data.
+    data = reshape(bits(33:code_len), [8, data_len]);
+    str = char([128 64 32 16 8 4 2 1] * data);
+```
+
+这样，我们在编写信息隐藏和恢复函数时便可以直接处理比特流，而不是字符串。这为我们的实现带来了方便。
+
+紧接着，注意到信息隐藏/恢复是在预处理/逆预处理阶段完成的，我们对原来的编解码函数加以修改，使其能够接收外界提供的预处理/逆预处理器。同时，编码器也需要接收待隐藏的数据，解码器也会返回隐藏的数据：
+
+```matlab
+%% jpeg_hide_encode: Encode an image using JPEG & hiding data in it
+function [DC_stream, AC_stream, height, width] = jpeg_hide_encode(img, ...
+                                                                  data, ...
+                                                                  preprocessor)
+    load ../../resource/JpegCoeff
+
+    [height, width] = size(img);  % Save the origin size.
+    coefficients = preprocessor(img, str2bits(data), QTAB);
+
+    DC_stream = encode_dc(coefficients(1, :), DCTAB);
+    AC_stream = encode_ac(coefficients(2:end, :), ACTAB);
+end
+```
+
+```matlab
+%% jpeg_hide_decode: decode a JPEG encoded image.
+function [img, data] = jpeg_hide_decode(DC_stream, AC_stream, height, width, ...
+                                        inv_preprocessor)
+    load ../../resource/JpegCoeff
+
+    block_num = prod(ceil([height width] / 8));
+
+    DC = decode_dc(DC_stream, DCTAB, block_num);
+    AC = decode_ac(AC_stream, ACTAB, block_num);
+
+    [img, bits] = inv_preprocessor([DC; AC], QTAB, height, width);
+    data = bits2str(bits);
+end
+```
+
+这样，我们只需要针对不同的信息隐藏/恢复方法设计对应的 `preprocessor`，`inv_preprocessor` 便可以了。
+
+同时，为了能方便地测量不同方法的隐蔽性，质量变化和压缩比变化，我们实现 `test_hide` 函数对比加入信息前后的图片：
+
+```matlab
+%% test_hide: Test the result of data hiding
+function test_hide(img, data, preprocessor, inv_preprocessor)
+    [DC, AC, height, width] = jpeg_encode(img);
+    [data_DC, data_AC] = jpeg_hide_encode(img, data, preprocessor);
+
+    % Use normal decoder to avoid cheating.
+    decoded_img = jpeg_decode(DC, AC, height, width);
+    data_img = jpeg_decode(data_DC, data_AC, height, width);
+    [~, recovered_data] = jpeg_hide_decode(data_DC, data_AC, height, width, ...
+                                           inv_preprocessor);
+
+    subplot 211
+    imshow(decoded_img);
+    title(['JPEG encoded (PSNR = ' num2str(psnr(decoded_img, img)), ...
+           ' Ratio = ' num2str(compression_ratio(DC, AC, height, width)) ')']);
+
+    subplot 212
+    imshow(data_img);
+    title(['JPEG encoded with data (PSNR = ' num2str(psnr(data_img, img)), ...
+           ' Ratio = ' num2str(compression_ratio(data_DC, data_AC, ...
+                                                 height, width)) ')']);
+end
+
+%% compression_ratio: Calculate the compression ratio of a image
+function ratio = compression_ratio(DC, AC, height, width)
+    ratio = (height * width * 8 + 64) / (length(DC) + length(AC) + 64);
+end
+```
+
+该函数会对比显示加入信息前后的图像，同时在标题上显示 PSNR 和压缩比。
+
 ## 第四章 人脸识别
