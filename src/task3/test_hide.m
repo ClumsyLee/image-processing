@@ -1,5 +1,5 @@
 %% test_hide: Test the result of data hiding
-function test_hide(img, data, preprocessor, inv_preprocessor)
+function recovered = test_hide(img, data, preprocessor, inv_preprocessor)
     [DC, AC, height, width] = jpeg_encode(img);
     [data_DC, data_AC] = jpeg_hide_encode(img, data, preprocessor);
 
@@ -8,6 +8,8 @@ function test_hide(img, data, preprocessor, inv_preprocessor)
     data_img = jpeg_decode(data_DC, data_AC, height, width);
     [~, recovered_data] = jpeg_hide_decode(data_DC, data_AC, height, width, ...
                                            inv_preprocessor);
+
+    recovered = all(data == recovered_data);
 
     subplot 211
     imshow(decoded_img);
