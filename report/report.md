@@ -987,4 +987,103 @@ test_hide(hall_gray, data, @preprocess_every_dct_coeff, ...
 
 图像质量的降低是因为，对替换每一位的最低位会产生很多原来不存在的高频分量，故失真主要体现在高频范围（雪花状）。而压缩率的减小则是因为，替换后很多 0 系数变成了 1，从而使得基于游程的熵编码压缩率大大降低。
 
+#### 3.2b 用信息位逐一替换若干量化后的 DCT 系数的最低位。
+
+由 3.2a 中得到的经验，我们自然想到，若只替换每一块低频 DCT 系数的最低位，得到的图像就不会有较高的高频分量了。为了实现这个目标，我们可以选择替换 Zig-Zag 后的前 `MAX_SLOT` 个元素的的最低位。我们在这里使用 `MAX_SLOT = 15`。
+
+具体代码和 3.2a 的差异如下：
+
+```diff
+diff --git a/preprocess_every_dct_coeff.m b/preprocess_some_dct_coeff.m
+index c116be8..0bebf30 100644
+--- a/preprocess_every_dct_coeff.m
++++ b/preprocess_some_dct_coeff.m
+@@ -1,6 +1,8 @@
+-%% preprocess_every_dct_coeff: Block splitting, DCT & quantization
+-function out = preprocess_every_dct_coeff(img, bits, QTAB)
+-    img = double(img) - 128;  % Convert to double for matrix ops later.
++%% preprocess_some_dct_coeff: Block splitting, DCT & quantization
++function out = preprocess_some_dct_coeff(img, bits, QTAB)
++    MAX_SLOT = 15;
++
++    img = double(img) - 128;  % convert to double for matrix ops later.
+ 
+     % Ensure row/col is a multiple of 8.
+     origin_size = size(img);
+@@ -16,14 +18,15 @@ function out = preprocess_every_dct_coeff(img, bits, QTAB)
+         for col = 1:8:new_size(2)
+             c = dct2(img(row:row+7, col:col+7));  % DCT.
+             c = round(c ./ QTAB);                 % Quantize.
++            c = c(zigzag(8));                     % Zig-Zag.
+ 
+             % Insert bits here.
+-            insert_range = (1:min(length(bits), 64))';
++            insert_range = (1:min(length(bits), MAX_SLOT))';
+             c(insert_range) = bitset(c(insert_range), 1, bits(insert_range), ...
+                                      'int8');
+             bits(insert_range) = [];
+ 
+-            out(:, k) = c(zigzag(8));             % Zig-Zag.
++            out(:, k) = c;
+             k = k + 1;
+         end
+     end
+```
+
+```diff
+diff --git a/inv_preprocess_every_dct_coeff.m b/inv_preprocess_some_dct_coeff.m
+index 5628cbf..242e3ea 100644
+--- a/inv_preprocess_every_dct_coeff.m
++++ b/inv_preprocess_some_dct_coeff.m
+@@ -1,21 +1,24 @@
+-%% inv_preprocess_every_dct_coeff: Inverse the preprocess
+-function [img, bits] = inv_preprocess_every_dct_coeff(pre_out, QTAB, ...
+-                                                      height, width)
++%% inv_preprocess_some_dct_coeff: Inverse the preprocess
++function [img, bits] = inv_preprocess_some_dct_coeff(pre_out, QTAB, ...
++                                                     height, width)
++    MAX_SLOT = 15;
++
+     img = zeros(ceil([height width] / 8) * 8);
+-    bits = zeros(numel(img), 1);
++    bits = zeros(numel(img) / 64 * MAX_SLOT, 1);
+ 
+     % Scanning blocks.
+     k = 1;
+     for row = 1:8:height
+         for col = 1:8:width
+             block = zeros(8, 8);
+-
+-            block(zigzag(8)) = pre_out(:, k);          % Inverse Zig-Zag.
++            this_col = pre_out(:, k);
+ 
+             % Recover data here.
+-            bits_pos = 64 * k - 63;
+-            bits(bits_pos:bits_pos+63) = bitget(block(:), 1, 'int8');
++            bits_pos = MAX_SLOT * (k - 1) + 1;
++            bits(bits_pos:bits_pos+MAX_SLOT-1) = ...
++                bitget(this_col(1:MAX_SLOT), 1, 'int8');
+ 
++            block(zigzag(8)) = this_col;          % Inverse Zig-Zag.
+             block = block .* QTAB;                     % Inverse quantize.
+             img(row:row+7, col:col+7) = idct2(block);  % Inverse DCT.
+ 
+```
+
+对其进行测试：
+
+```matlab
+test_hide(hall_gray, data, @preprocess_some_dct_coeff, ...
+                           @inv_preprocess_some_dct_coeff)
+% ans =
+%
+%      1
+```
+
+![Hide in some DCT coefficient](hide_some_dct_coeff.png)
+
+可以看到，相对于 3.2a，图像的失真明显小了很多，同时 PSNR（31.19 => 29.41），压缩率（6.41 => 5.98）也和原来相差无几了。
+
+当然值得一提的是，还是能很轻易地看出隐藏信息后的图像有人工雕琢的痕迹（如右上角的云中的高频分量导致其失真较为严重）。另外，块与块之间的间隙显得愈加明显。这应该是因为隐藏在相邻两块内的数据不同，导致对 DCT 系数矩阵造成的影响不同，从而造成了差异感。
+
 ## 第四章 人脸识别
