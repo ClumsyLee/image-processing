@@ -891,4 +891,88 @@ end
 
 该函数会对比显示加入信息前后的图像，同时在标题上显示 PSNR 和压缩比。
 
+#### 3.2a 用信息位逐一替换每个量化后的 DCT 系数的最低位。
+
+为了实现该方法的隐藏过程，我们对第二章中的 `preprocess.m` 加以修改，在量化之后，Zig-Zag 之前插入比特流到最低位。
+
+需要注意的是，我们需要为 `bitset` 函数提供 `assumedtype` 参数 `int8`。这是因为量化后的 DCT 系数可能是负数，实际取值为 -128 ~ 127，即为 `int8` 的取值范围，而 `bitset` 必须要知道类型信息才能对负数进行操作。 
+
+具体代码变化如下：
+
+```diff
+diff --git a/../task2/preprocess.m b/preprocess_every_dct_coeff.m
+index 7c62ddf..67a4a7d 100644
+--- a/../task2/preprocess.m
++++ b/preprocess_every_dct_coeff.m
+@@ -1,5 +1,5 @@
+-%% preprocess: Block splitting, DCT & quantization
+-function out = preprocess(img, QTAB)
++%% preprocess_every_dct_coeff: Block splitting, DCT & quantization
++function out = preprocess_every_dct_coeff(img, bits, QTAB)
+     img = double(img) - 128;  % Convert to double for matrix ops later.
+ 
+     % Ensure row/col is a multiple of 8.
+@@ -16,6 +16,13 @@ function out = preprocess(img, QTAB)
+         for col = 1:8:new_size(2)
+             c = dct2(img(row:row+7, col:col+7));  % DCT.
+             c = round(c ./ QTAB);                 % Quantize.
++
++            % Insert bits here.
++            insert_range = (1:min(length(bits), 64))';
++            c(insert_range) = bitset(c(insert_range), 1, bits(insert_range), ...
++                                     'int8');
++            bits(insert_range) = [];
++
+             out(:, k) = c(zigzag(8));             % Zig-Zag.
+             k = k + 1;
+         end
+```
+
+同样地，我们也对 `inv_preprocess` 进行修改，在逆  Zig-Zag 之后，反量化之前将最低位提取为比特流。注意到这个地方我们提取的比特流实际上是冗余的，`bits2str` 函数会忽略掉多余的比特流。这样做是为了将逆序列化的工作完全解耦合出去，从而简化逆预处理器的工作。
+
+这里要注意，基于同样的原因，使用 `bitget` 时也应该提供 `assumedtype` 参数 `int8`。具体代码变化如下：
+
+```diff
+diff --git a/../task2/inv_preprocess.m b/inv_preprocess_every_dct_coeff.m
+index 2021457..5628cbf 100644
+--- a/../task2/inv_preprocess.m
++++ b/inv_preprocess_every_dct_coeff.m
+@@ -1,6 +1,8 @@
+-%% inv_preprocess: Inverse the preprocess
+-function [img] = inv_preprocess(pre_out, QTAB, height, width)
++%% inv_preprocess_every_dct_coeff: Inverse the preprocess
++function [img, bits] = inv_preprocess_every_dct_coeff(pre_out, QTAB, ...
++                                                      height, width)
+     img = zeros(ceil([height width] / 8) * 8);
++    bits = zeros(numel(img), 1);
+ 
+     % Scanning blocks.
+     k = 1;
+@@ -9,6 +11,11 @@ function [img] = inv_preprocess(pre_out, QTAB, height, width)
+             block = zeros(8, 8);
+ 
+             block(zigzag(8)) = pre_out(:, k);          % Inverse Zig-Zag.
++
++            % Recover data here.
++            bits_pos = 64 * k - 63;
++            bits(bits_pos:bits_pos+63) = bitget(block(:), 1, 'int8');
++
+             block = block .* QTAB;                     % Inverse quantize.
+             img(row:row+7, col:col+7) = idct2(block);  % Inverse DCT.
+ 
+```
+
+让我们来测试一下：
+
+```matlab
+test_hide(hall_gray, data, @preprocess_every_dct_coeff, ...
+                           @inv_preprocess_every_dct_coeff);
+```
+
+![Hide in every DCT coefficient](hide_every_dct_coeff.png)
+
+可以看到，隐藏信息后，图像上方有了明显的失真，PSNR（31.19 => 22.53），压缩率（6.41 => 4.93）也有较大减小。
+
+图像质量的降低是因为，对替换每一位的最低位会产生很多原来不存在的高频分量，故失真主要体现在高频范围（雪花状）。而压缩率的减小则是因为，替换后很多 0 系数变成了 1，从而使得基于游程的熵编码压缩率大大降低。
+
 ## 第四章 人脸识别
