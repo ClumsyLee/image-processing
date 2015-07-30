@@ -811,7 +811,7 @@ function str = bits2str(bits)
     if code_len > numel(bits)  % Wrong header.
         warning(['Wrong header detected, ' ...
                  'trying to read from the whole bit stream.']);
-        data_len = ceil((numel(bits) - 32) / 8);
+        data_len = floor((numel(bits) - 32) / 8);
         code_len = data_len * 8 + 32;
     end
 
@@ -861,7 +861,8 @@ end
 
 ```matlab
 %% test_hide: Test the result of data hiding
-function recovered = test_hide(img, data, preprocessor, inv_preprocessor)
+function [recovered, recovered_data] = test_hide(img, data, preprocessor, ...
+                                                            inv_preprocessor)
     [DC, AC, height, width] = jpeg_encode(img);
     [data_DC, data_AC] = jpeg_hide_encode(img, data, preprocessor);
 
@@ -871,7 +872,8 @@ function recovered = test_hide(img, data, preprocessor, inv_preprocessor)
     [~, recovered_data] = jpeg_hide_decode(data_DC, data_AC, height, width, ...
                                            inv_preprocessor);
 
-    recovered = all(data == recovered_data);
+    recovered = length(data) == length(recovered_data) && ...
+                all(data == recovered_data);
 
     subplot 211
     imshow(decoded_img);
