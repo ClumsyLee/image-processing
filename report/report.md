@@ -1304,3 +1304,75 @@ index 242e3ea..090b0f9 100644
 可以看到，我们的算法在 PSNR(31.19 => 30.68) 与压缩率 (6.41 => 6.41) 与直接 JPEG 编码几乎无差异的情况下隐藏的信息是 3.2a 算法的四倍多（35 => 151 Byte）。同时，从肉眼上也很难发现上下两图有什么差异。这说明，我们确实达到了我们所希望的目标。
 
 ## 第四章 人脸识别
+
+### 4.1a 是否需要将图像调整为相同大小？
+
+不需要。因为最后提取出的特征是不同颜色出现的频率，所以训练图像的大小并不会影响训练的结果。
+
+### 4.1b 若 L = 3, 4, 5，所得的 v 之间有何关系？
+
+首先，为了训练的方便，让我们定义载入目录下图片的函数：
+
+```matlab
+%% load_imgs: Load images under a directory.
+function imgs = load_imgs(directory)
+    imgs = {};
+    files = dir(directory);
+    for file = files'
+        name = [directory '/' file.name];
+        if ~isdir(name)
+            imgs = [imgs; imread(name)];
+        end
+    end
+```
+
+然后我们定义 `quantize_img` 函数，其作用是将图片量化，即将每个像素转换为一个非负整数。这里我们使用 `bitshift` 函数来实现。代码如下：
+
+```matlab
+%% quantize_img: Quantize image
+function quantized_img = quantize_img(img, L)
+    shift = 8 - L;
+    quantized_img = uint32(bitshift(img, -shift));
+    quantized_img = bitshift(quantized_img(:, :, 1), 2 * L) + ...
+                    bitshift(quantized_img(:, :, 2),     L) + ...
+                             quantized_img(:, :, 3);
+```
+
+最后我们实现训练算法，其中使用 `histc` 函数来统计每种颜色在每张图片中出现的次数。代码如下：
+
+```matlab
+%% train_face_model: Train a face model using face images
+%% L is the bits used for every color component
+function v = train_face_model(imgs, L)
+    bin_num = 2 ^ (3 * L);
+    v = zeros(bin_num, 1);
+    pixels = 0;
+    for k = 1:length(imgs)
+        img = quantize_img(imgs{k}, L);
+        v = v + histc(img(:), 0:bin_num-1) / numel(img);
+    end
+end
+```
+
+在调用函数之前，让我们先理论分析一下。对于人脸，主要的颜色应该在 RGB 空间中集中在一个区域。所以，对于我们选取的遍历方式，最后得到的 v 应该有最多 2^L 个峰，每个峰中有最多 2^L 个小峰。同时，当 v 增大 1 时，峰的个数，每个峰中间小峰的个数都会增大一倍。同时，峰的高度会减小为原来的 1/4 左右。让我们来看一看实际的情况：
+
+```matlab
+subplot 311
+plot(train_face_model(imgs, 3))
+title 'L = 3'
+ylabel v
+subplot 312
+plot(train_face_model(imgs, 4))
+title 'L = 4'
+ylabel v
+subplot 313
+plot(train_face_model(imgs, 5))
+title 'L = 5'
+ylabel v
+xlabel n
+```
+
+![v-n curve when L = 3, 4, 5](v_n_L.png)
+
+可以看到，实际的 v 随 L 的变化与我们分析的大致一致。
+
