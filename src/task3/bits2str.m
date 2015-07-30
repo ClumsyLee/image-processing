@@ -7,7 +7,7 @@ function str = bits2str(bits)
     if code_len > numel(bits)  % Wrong header.
         warning(['Wrong header detected, ' ...
                  'trying to read from the whole bit stream.']);
-        data_len = ceil((numel(bits) - 32) / 8);
+        data_len = floor((numel(bits) - 32) / 8);
         code_len = data_len * 8 + 32;
     end
 
