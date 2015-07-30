@@ -1419,9 +1419,7 @@ function varargout = highlight_face(img, faces)
         b(frame) = 0;
     end
 
-    I = r;
-    I(:, :, 2) = g;
-    I(:, :, 3) = b;
+    I = cat(3, r, g, b);
 
     if nargout
         varargout(1) = I;
