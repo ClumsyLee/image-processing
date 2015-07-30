@@ -1088,4 +1088,105 @@ test_hide(hall_gray, data, @preprocess_some_dct_coeff, ...
 
 当然值得一提的是，还是能很轻易地看出隐藏信息后的图像有人工雕琢的痕迹（如右上角的云中的高频分量导致其失真较为严重）。另外，块与块之间的间隙显得愈加明显。这应该是因为隐藏在相邻两块内的数据不同，导致对 DCT 系数矩阵造成的影响不同，从而造成了差异感。
 
+#### 3.2c 将信息位加在最后一个非零系数之后
+
+为了将信息为加在最后一个非零系数之后，我们只需要先将比特流中所有 0 替换 -1，然后用 `find` 找到最后一个非零系数，在其之后（若其是最后一个元素则在其位置上）插入一个处理后的比特位。同样地，恢复数据时只需要用 `find` 找到最后一个非零系数，提取出比特位后将 -1 替换为 0即可。
+
+需要注意到的是，这种方法在每块中只隐藏了 1 个信息位，所以隐藏的效率并不高。
+
+具体代码和 3.2b 的差异如下：
+
+```diff
+diff --git a/preprocess_some_dct_coeff.m b/preprocess_last_nonzero_dct_coeff.m
+index 0bebf30..dde66f8 100644
+--- a/preprocess_some_dct_coeff.m
++++ b/preprocess_last_nonzero_dct_coeff.m
+@@ -1,8 +1,7 @@
+ %% preprocess_some_dct_coeff: Block splitting, DCT & quantization
+ function out = preprocess_some_dct_coeff(img, bits, QTAB)
+-    MAX_SLOT = 15;
+-
+     img = double(img) - 128;  % convert to double for matrix ops later.
++    bits(bits == 0) = -1;
+ 
+     % Ensure row/col is a multiple of 8.
+     origin_size = size(img);
+@@ -21,10 +20,10 @@ function out = preprocess_some_dct_coeff(img, bits, QTAB)
+             c = c(zigzag(8));                     % Zig-Zag.
+ 
+             % Insert bits here.
+-            insert_range = (1:min(length(bits), MAX_SLOT))';
+-            c(insert_range) = bitset(c(insert_range), 1, bits(insert_range), ...
+-                                     'int8');
+-            bits(insert_range) = [];
++            if numel(bits)
++                c(min(find(c, 1, 'last') + 1, 64)) = bits(1);
++                bits(1) = [];
++            end
+ 
+             out(:, k) = c;
+             k = k + 1;
+```
+
+```diff
+diff --git a/inv_preprocess_some_dct_coeff.m b/inv_preprocess_last_nonzero_dct_coeff.m
+index 242e3ea..327d96c 100644
+--- a/inv_preprocess_some_dct_coeff.m
++++ b/inv_preprocess_last_nonzero_dct_coeff.m
+@@ -1,10 +1,8 @@
+ %% inv_preprocess_some_dct_coeff: Inverse the preprocess
+ function [img, bits] = inv_preprocess_some_dct_coeff(pre_out, QTAB, ...
+                                                      height, width)
+-    MAX_SLOT = 15;
+-
+     img = zeros(ceil([height width] / 8) * 8);
+-    bits = zeros(numel(img) / 64 * MAX_SLOT, 1);
++    bits = zeros(size(pre_out, 2), 1);
+ 
+     % Scanning blocks.
+     k = 1;
+@@ -14,9 +12,7 @@ function [img, bits] = inv_preprocess_some_dct_coeff(pre_out, QTAB, ...
+             this_col = pre_out(:, k);
+ 
+             % Recover data here.
+-            bits_pos = MAX_SLOT * (k - 1) + 1;
+-            bits(bits_pos:bits_pos+MAX_SLOT-1) = ...
+-                bitget(this_col(1:MAX_SLOT), 1, 'int8');
++            bits(k) = max(0, this_col(find(this_col, 1, 'last')));
+ 
+             block(zigzag(8)) = this_col;          % Inverse Zig-Zag.
+             block = block .* QTAB;                     % Inverse quantize.
+```
+
+测试结果如下：
+
+```matlab
+[recovered, recovered_data] = ...
+    test_hide(hall_gray, data, @preprocess_last_nonzero_dct_coeff, ...
+                               @inv_preprocess_last_nonzero_dct_coeff)
+% Warning: 4109 bit(s) not encoded 
+% > In preprocess_last_nonzero_dct_coeff at 34
+%   In jpeg_hide_encode at 8
+%   In test_hide at 5 
+% Warning: Wrong header detected, trying to read from the whole bit stream. 
+% > In bits2str at 8
+%   In jpeg_hide_decode at 12
+%   In test_hide at 10 
+%
+% recovered =
+%
+%      0
+%
+%
+% recovered_data =
+%
+% Here's to the crazy ones. The misfi
+```
+
+![Hide after last non-zero DCT coefficient](hide_last_nonzero_dct_coeff.png)
+
+可以看到，我们的大部分信息都没能被隐藏进图片。不过，与之相对应的，我们获得了还不错的 PSNR 和压缩率。压缩率的损失不大是因为，我们的替换策略保证在基于游程的熵编码中，每个块中最多只会多出一对 Run/Size Amp。
+
+需要注意到的是，尽管只隐藏了 1/15 的信息，这里得到的 PSNR 还没有方法二中得到的高。然而，从肉眼上直观感觉，方法三中的图片只是在局部上有少量的失真，不像方法二中整张图片都有明显的失真。这也提醒我们，对于图片质量这种本身就基于主观感受的属性，客观评价虽然方便计算，但难免会与主观评价有所冲突。
+
 ## 第四章 人脸识别
