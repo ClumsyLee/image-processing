@@ -8,4 +8,5 @@ function v = train_face_model(imgs, L)
         img = quantize_img(imgs{k}, L);
         v = v + histc(img(:), 0:bin_num-1) / numel(img);
     end
+    v = v / length(imgs);
 end
