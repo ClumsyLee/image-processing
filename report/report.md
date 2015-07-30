@@ -1377,3 +1377,14 @@ xlabel n
 
 可以看到，实际的 v 随 L 的变化与我们分析的大致一致。
 
+### 4.2 设计检测算法
+
+首先，我们定义 `face_distance` 函数，用来计算一块特定的已量化的图像区域，和模型之间的距离：
+
+```matlab
+%% face_distance: Distance between a quantized region and a face model
+function d = face_distance(region, model)
+    u = histc(region(:), 0:length(model)-1) / numel(region);
+    d = 1 - sum(sqrt(u .* model));
+```
+
