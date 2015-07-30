@@ -11,7 +11,7 @@ function varargout = detect_face(img, model, sample_size, sample_step, ...
     col_sample = 1:sample_step:img_size(2)-sample_size+1;
 
     faces_UL = combvec(row_sample, col_sample);
-    faces_LR = faces_UL + sample_size;
+    faces_LR = faces_UL + sample_size - 1;
 
     % Expand every sample.
     for k = 1:size(faces_UL, 2)
