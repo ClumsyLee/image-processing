@@ -1189,4 +1189,117 @@ index 242e3ea..327d96c 100644
 
 需要注意到的是，尽管只隐藏了 1/15 的信息，这里得到的 PSNR 还没有方法二中得到的高。然而，从肉眼上直观感觉，方法三中的图片只是在局部上有少量的失真，不像方法二中整张图片都有明显的失真。这也提醒我们，对于图片质量这种本身就基于主观感受的属性，客观评价虽然方便计算，但难免会与主观评价有所冲突。
 
+### 3.3 设计新的隐藏算法并分析优缺点
+
+通过前面几个方法的练习，我们希望新算法有如下特性：
+
+* 抗 JPEG 编码
+* 对压缩率影响不大
+* 能隐藏较多信息
+* 失真不大
+
+我们这样设计我们的算法：
+
+1. 设置一个正偶数上界 `UPPER_BOUND`；
+2. 用信息位替换掉这样的 DCT 系数：其大于等于 `UPPER_BOUND`，或小于等于 `-UPPER_BOUND + 1`。
+
+我们的设计思路是，对于那些已经较大的 DCT 系数，改变其最低位并不会造成太多视觉上的影响。
+
+其中，上界选取为偶数，下界取为奇数是为了保证用信息位替换后，原本在范围内的点仍然处于范围内。
+
+具体代码与 3.2b 相比变化如下：
+
+```diff
+diff --git a/preprocess_some_dct_coeff.m b/preprocess_large_dct_coeff.m
+index 0bebf30..a899509 100644
+--- a/preprocess_some_dct_coeff.m
++++ b/preprocess_large_dct_coeff.m
+@@ -1,6 +1,7 @@
+ %% preprocess_some_dct_coeff: Block splitting, DCT & quantization
+ function out = preprocess_some_dct_coeff(img, bits, QTAB)
+-    MAX_SLOT = 15;
++    UPPER_BOUND = 6;
++    LOWER_BOUND = -UPPER_BOUND + 1;
+ 
+     img = double(img) - 128;  % convert to double for matrix ops later.
+ 
+@@ -21,9 +22,10 @@ function out = preprocess_some_dct_coeff(img, bits, QTAB)
+             c = c(zigzag(8));                     % Zig-Zag.
+ 
+             % Insert bits here.
+-            insert_range = (1:min(length(bits), MAX_SLOT))';
+-            c(insert_range) = bitset(c(insert_range), 1, bits(insert_range), ...
+-                                     'int8');
++            slot = find(c <= LOWER_BOUND | c >= UPPER_BOUND);
++            insert_range = 1:min(length(bits), length(slot));
++            slot = slot(insert_range);
++            c(slot) = bitset(c(slot), 1, bits(insert_range), 'int8');
+             bits(insert_range) = [];
+ 
+             out(:, k) = c;
+```
+
+```diff
+diff --git a/inv_preprocess_some_dct_coeff.m b/inv_preprocess_large_dct_coeff.m
+index 242e3ea..090b0f9 100644
+--- a/inv_preprocess_some_dct_coeff.m
++++ b/inv_preprocess_large_dct_coeff.m
+@@ -1,10 +1,11 @@
+ %% inv_preprocess_some_dct_coeff: Inverse the preprocess
+ function [img, bits] = inv_preprocess_some_dct_coeff(pre_out, QTAB, ...
+                                                      height, width)
+-    MAX_SLOT = 15;
++    UPPER_BOUND = 6;
++    LOWER_BOUND = -UPPER_BOUND + 1;
+ 
+     img = zeros(ceil([height width] / 8) * 8);
+-    bits = zeros(numel(img) / 64 * MAX_SLOT, 1);
++    bits = [];
+ 
+     % Scanning blocks.
+     k = 1;
+@@ -14,9 +15,8 @@ function [img, bits] = inv_preprocess_some_dct_coeff(pre_out, QTAB, ...
+             this_col = pre_out(:, k);
+ 
+             % Recover data here.
+-            bits_pos = MAX_SLOT * (k - 1) + 1;
+-            bits(bits_pos:bits_pos+MAX_SLOT-1) = ...
+-                bitget(this_col(1:MAX_SLOT), 1, 'int8');
++            slot = this_col(this_col <= LOWER_BOUND | this_col >= UPPER_BOUND);
++            bits = [bits; bitget(slot, 1, 'int8')];
+ 
+             block(zigzag(8)) = this_col;          % Inverse Zig-Zag.
+             block = block .* QTAB;                     % Inverse quantize.
+```
+
+让我们来测试一下我们的新算法：
+
+```matlab
+[recovered, recovered_data] = ...
+    test_hide(hall_gray, data, @preprocess_large_dct_coeff, ...
+                               @inv_preprocess_large_dct_coeff)
+% Warning: 3396 bit(s) not encoded 
+% > In preprocess_large_dct_coeff at 37
+%   In jpeg_hide_encode at 8
+%   In test_hide at 5 
+% Warning: Wrong header detected, trying to read from the whole bit stream. 
+% > In bits2str at 8
+%   In jpeg_hide_decode at 12
+%   In test_hide at 10 
+%
+% recovered =
+%
+%      0
+%
+%
+% recovered_data =
+%
+% Here's to the crazy ones. The misfits. The rebels. The troublemakers. ...
+% The round pegs in the square holes. The ones who see t
+```
+
+![Hide large DCT coefficient](hide_large_dct_coeff.png)
+
+可以看到，我们的算法在 PSNR(31.19 => 30.78) 与压缩率 (6.41 => 6.40) 与直接 JPEG 编码几乎无差异的情况下隐藏的信息是 3.2a 算法的近三倍。同时，从肉眼上也很难发现上下两图有什么差异。这说明，我们确实达到了我们所希望的目标。
+
 ## 第四章 人脸识别
