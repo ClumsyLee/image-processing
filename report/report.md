@@ -1388,3 +1388,45 @@ function d = face_distance(region, model)
     d = 1 - sum(sqrt(u .* model));
 ```
 
+同时，我们定义 `highlight_face` 函数，用来在图像上显示出识别出的人脸：
+
+```matlab
+%% highlight_face: Highlight faces in an image
+function varargout = highlight_face(img, faces)
+    WIDTH = 2;
+
+    r = img(:, :, 1);
+    g = img(:, :, 2);
+    b = img(:, :, 3);
+
+    for k = 1:size(faces, 3)
+        face = faces(:, :, k);
+        row = (1:size(img, 1))';
+        col = 1:size(img, 2);
+
+        row_range = (row >= face(1, 1) & row <= face(1, 2));
+        col_range = (col >= face(2, 1) & col <= face(2, 2));
+        row_bound = row_range & (row - face(1, 1) < WIDTH | ...
+                                 face(1, 2) - row < WIDTH);
+        col_bound = col_range & (col - face(2, 1) < WIDTH | ...
+                                 face(2, 2) - col < WIDTH);
+
+        frame = bsxfun(@and, row_bound, col_range) | ...
+                bsxfun(@and, col_bound, row_range);
+
+        r(frame) = 255;
+        g(frame) = 0;
+        b(frame) = 0;
+    end
+
+    I = r;
+    I(:, :, 2) = g;
+    I(:, :, 3) = b;
+
+    if nargout
+        varargout(1) = I;
+    else
+        imshow(I);
+    end
+```
+
