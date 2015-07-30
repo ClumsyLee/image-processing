@@ -1203,9 +1203,9 @@ index 242e3ea..327d96c 100644
 1. 设置一个正偶数上界 `UPPER_BOUND`；
 2. 用信息位替换掉这样的 DCT 系数：其大于等于 `UPPER_BOUND`，或小于等于 `-UPPER_BOUND + 1`。
 
-我们的设计思路是，对于那些已经较大的 DCT 系数，改变其最低位并不会造成太多视觉上的影响。
+我们的设计思路是，对于那些已经较大的 DCT 系数，改变其最低位并不会造成太多视觉上的影响。其中，上界选取为偶数，下界取为奇数是为了保证用信息位替换后，原本在范围内的点仍然处于范围内。
 
-其中，上界选取为偶数，下界取为奇数是为了保证用信息位替换后，原本在范围内的点仍然处于范围内。
+这里我们选取 `UPPER_BOUND = 4`，是因为经过试验，这个上界即能隐藏较多的信息，同时也能保证较好的图像质量。同时，由于 Category 3 是从 4 开始的，这样选取也能减少 Category 在隐藏之后增加的 DCT 系数的比例，从而避免了压缩率上的损失。
 
 具体代码与 3.2b 相比变化如下：
 
@@ -1218,8 +1218,8 @@ index 0bebf30..a899509 100644
  %% preprocess_some_dct_coeff: Block splitting, DCT & quantization
  function out = preprocess_some_dct_coeff(img, bits, QTAB)
 -    MAX_SLOT = 15;
-+    UPPER_BOUND = 6;
-+    LOWER_BOUND = -UPPER_BOUND + 1;
++    UPPER_BOUND = 4;
++    LOWER_BOUND = -UPPER_BOUND - 1;
  
      img = double(img) - 128;  % convert to double for matrix ops later.
  
@@ -1249,8 +1249,8 @@ index 242e3ea..090b0f9 100644
  function [img, bits] = inv_preprocess_some_dct_coeff(pre_out, QTAB, ...
                                                       height, width)
 -    MAX_SLOT = 15;
-+    UPPER_BOUND = 6;
-+    LOWER_BOUND = -UPPER_BOUND + 1;
++    UPPER_BOUND = 4;
++    LOWER_BOUND = -UPPER_BOUND - 1;
  
      img = zeros(ceil([height width] / 8) * 8);
 -    bits = zeros(numel(img) / 64 * MAX_SLOT, 1);
@@ -1278,7 +1278,7 @@ index 242e3ea..090b0f9 100644
 [recovered, recovered_data] = ...
     test_hide(hall_gray, data, @preprocess_large_dct_coeff, ...
                                @inv_preprocess_large_dct_coeff)
-% Warning: 3396 bit(s) not encoded 
+% Warning: 3181 bit(s) not encoded 
 % > In preprocess_large_dct_coeff at 37
 %   In jpeg_hide_encode at 8
 %   In test_hide at 5 
@@ -1295,11 +1295,12 @@ index 242e3ea..090b0f9 100644
 % recovered_data =
 %
 % Here's to the crazy ones. The misfits. The rebels. The troublemakers. ...
-% The round pegs in the square holes. The ones who see t
+% The round pegs in the square holes. The ones who see things differently. ...
+% They're 
 ```
 
 ![Hide large DCT coefficient](hide_large_dct_coeff.png)
 
-可以看到，我们的算法在 PSNR(31.19 => 30.78) 与压缩率 (6.41 => 6.40) 与直接 JPEG 编码几乎无差异的情况下隐藏的信息是 3.2a 算法的近三倍。同时，从肉眼上也很难发现上下两图有什么差异。这说明，我们确实达到了我们所希望的目标。
+可以看到，我们的算法在 PSNR(31.19 => 30.68) 与压缩率 (6.41 => 6.41) 与直接 JPEG 编码几乎无差异的情况下隐藏的信息是 3.2a 算法的四倍多（35 => 151 Byte）。同时，从肉眼上也很难发现上下两图有什么差异。这说明，我们确实达到了我们所希望的目标。
 
 ## 第四章 人脸识别

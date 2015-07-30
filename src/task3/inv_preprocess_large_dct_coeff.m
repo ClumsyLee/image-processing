@@ -1,8 +1,8 @@
 %% inv_preprocess_some_dct_coeff: Inverse the preprocess
 function [img, bits] = inv_preprocess_some_dct_coeff(pre_out, QTAB, ...
                                                      height, width)
-    UPPER_BOUND = 6;
-    LOWER_BOUND = -UPPER_BOUND + 1;
+    UPPER_BOUND = 4;
+    LOWER_BOUND = -UPPER_BOUND - 1;
 
     img = zeros(ceil([height width] / 8) * 8);
     bits = [];

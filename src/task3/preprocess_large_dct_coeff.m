@@ -1,7 +1,7 @@
 %% preprocess_some_dct_coeff: Block splitting, DCT & quantization
 function out = preprocess_some_dct_coeff(img, bits, QTAB)
-    UPPER_BOUND = 6;
-    LOWER_BOUND = -UPPER_BOUND + 1;
+    UPPER_BOUND = 4;
+    LOWER_BOUND = -UPPER_BOUND - 1;
 
     img = double(img) - 128;  % convert to double for matrix ops later.
 
