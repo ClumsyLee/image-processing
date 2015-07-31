@@ -62,7 +62,37 @@ function varargout = detect_face(img, model, sample_size, sample_step, ...
 
             faces_LR(:, (row - 1) * length(col_sample) + col) = ...
                 faces_LR(:, (row + row_offset - 1) * length(col_sample) + col + col_offset);
+        end
+    end
 
+    pick = pick';
+    pick = pick(:);
+
+    for k = 1:length(pick)
+        if pick(k)
+            part_dist(k) = part_distance(img, faces_UL(:, k), faces_LR(:, k), model) <= expand_threshold;
+        end
+    end
+
+
+    for k1 = 1:length(pick)-1
+        if ~pick(k1)
+            continue
+        end
+        UL1 = faces_UL(:, k1);
+        LR1 = faces_LR(:, k1);
+        for k2 = k1+1:length(pick)
+            if ~pick(k2)
+                continue
+            end
+            UL2 = faces_UL(:, k2);
+            LR2 = faces_LR(:, k2);
+            if UL1 <= UL2 & LR1 >= UL2 | ...
+               UL1 <= LR2 & LR1 >= LR2 | ...
+               UL2 <= UL1 & LR2 >= UL1 | ...
+               UL2 <= LR1 & LR2 >= LR1
+                pick(k2) = false;
+            end
         end
     end
 
@@ -128,7 +158,6 @@ function varargout = detect_face(img, model, sample_size, sample_step, ...
     % end
 
 
-    pick = pick';
 
     for k = 1:size(faces_UL, 2)
         if (pick(k))
