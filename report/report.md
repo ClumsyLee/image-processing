@@ -1426,3 +1426,111 @@ function varargout = highlight_face(img, faces_UL, faces_LR)
     end
 ```
 
+然后我们就可以开始设计检测算法了。我们设计如下算法：
+
+1. 在图像上以一定间距进行采样，每个采样块均为正方形；
+2. 计算每个采样块与训练模型的距离，排除距离大于阈值的采样块；
+3. 将所有采样块按上述距离，由小到大排序
+4. 从距离最小的块开始遍历，若发现某块与某已选块没有重叠，则将其加入已选块。
+
+代码实现如下：
+
+```matlab
+%% detect_face: Detect faces in an image
+function varargout = detect_face(img, model, sample_size, sample_step, ...
+                                 sample_threshold)
+    faces_UL = [];
+    faces_LR = [];
+    origin_img = img;
+    img = quantize_img(img, log2(length(model)) / 3);  % Infer L from model.
+    img_size = [size(img, 1); size(img, 2)];
+
+    % Generate samples.
+    row_sample = 1:sample_step:img_size(1)-sample_size+1;
+    col_sample = 1:sample_step:img_size(2)-sample_size+1;
+
+    faces_UL = combvec(col_sample, row_sample);
+    faces_UL = flipud(faces_UL);
+    faces_LR = faces_UL + sample_size - 1;
+
+    pick = logical(zeros(1, size(faces_UL, 2)));
+    block_dist = zeros(1, size(faces_UL, 2));
+    for k = 1:size(faces_UL, 2)
+        d = part_distance(img, faces_UL(:, k), faces_LR(:, k), model);
+        block_dist(k) = d;
+        pick(k) = d <= sample_threshold;
+    end
+
+    [value, index] = sort(block_dist);
+    for k1 = 2:length(pick)
+        index1 = index(k1);
+        if ~pick(index1)
+            continue
+        end
+        x11 = faces_UL(1, index1);
+        y11 = faces_UL(2, index1);
+        x12 = faces_LR(1, index1);
+        y12 = faces_LR(2, index1);
+        for k2 = 1:k1-1
+            index2 = index(k2);
+            if ~pick(index2)
+                continue
+            end
+            x21 = faces_UL(1, index2);
+            y21 = faces_UL(2, index2);
+            x22 = faces_LR(1, index2);
+            y22 = faces_LR(2, index2);
+
+            if (x11 >= x21 && x11 <= x22 || ...
+                x12 >= x21 && x12 <= x22) && ...
+               (y11 >= y21 && y11 <= y22 || ...
+                y12 >= y21 && y12 <= y22)
+               pick(index1) = 0;
+               continue
+           end
+        end
+    end
+
+    faces_UL = faces_UL(:, pick(:));
+    faces_LR = faces_LR(:, pick(:));
+
+    if nargout
+    else
+        highlight_face(origin_img, faces_UL, faces_LR);
+    end
+end
+
+%% part_distance: Get part of the image
+function d = part_distance(img, UL, LR, model)
+    d = face_distance(img(UL(1):LR(1), UL(2):LR(2), :), model);
+end
+```
+
+我们选用一张皇家马德里队的照片进行识别：
+
+```matlab
+detect_face(img2, v3, 55, 10, 0.23)
+```
+
+![识别结果](detect.png)
+
+可以看到，除了有一位队员因为脸比较黑没有被识别出来，其他队员的脸都被正确识别了，同时也没有识别出不是脸的部分。
+
+如果将 L 取为 4 或者 5，需要调整阈值才能获得比较好的结果。如下所示：
+
+```matlab
+detect_face(img2, v4, 55, 10, 0.35)
+```
+
+![L = 4 识别结果](detect_v4.png)
+
+```matlab
+detect_face(img2, v5, 55, 10, 0.5)
+```
+
+![L = 5 识别结果](detect_v5.png)
+
+可以看出，在调整了阈值之后，L 的选取对最终的识别基本没有影响。
+
+对于阈值的变化，我们也可以很好解释：随着 L 增大，颜色空间被细分，颜色种类变多，而每种颜色的便会变小。故在训练集相同，测试图像相同的情况下，待测脸与模型间的距离会增大。
+
